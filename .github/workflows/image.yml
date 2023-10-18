@@ -12,6 +12,7 @@ name: Create and publish a Container image
 on:
   push:
     branches:
+      - main
       - sofatutor-kids
     tags:
       - "v*"
