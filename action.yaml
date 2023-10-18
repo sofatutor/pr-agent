@@ -3,6 +3,11 @@ description: 'Summarize, review and suggest improvements for pull requests'
 branding:
   icon: 'award'
   color: 'green'
+inputs:
+  image:
+    description: 'The Docker image (defaults to building from Dockerfile)'
+    required: false
+    default: 'Dockerfile.github_action_dockerhub'
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/sofatutor/pr-agent:sofatutor-kids'
+  image: '${{ inputs.image }}'
