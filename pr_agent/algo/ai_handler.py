@@ -1,5 +1,6 @@
 import os
 
+import boto3
 import litellm
 import openai
 from litellm import acompletion
@@ -23,39 +24,50 @@ class AiHandler:
         Initializes the OpenAI API key and other settings from a configuration file.
         Raises a ValueError if the OpenAI key is missing.
         """
-        try:
+        self.azure = False
+        self.aws_bedrock_client = None
+
+        if get_settings().get("OPENAI.KEY", None):
             openai.api_key = get_settings().openai.key
             litellm.openai_key = get_settings().openai.key
-            if get_settings().get("litellm.use_client"):
-                litellm_token = get_settings().get("litellm.LITELLM_TOKEN")
-                assert litellm_token, "LITELLM_TOKEN is required"
-                os.environ["LITELLM_TOKEN"] = litellm_token
-                litellm.use_client = True
-            self.azure = False
-            if get_settings().get("OPENAI.ORG", None):
-                litellm.organization = get_settings().openai.org
-            if get_settings().get("OPENAI.API_TYPE", None):
-                if get_settings().openai.api_type == "azure":
-                    self.azure = True
-                    litellm.azure_key = get_settings().openai.key
-            if get_settings().get("OPENAI.API_VERSION", None):
-                litellm.api_version = get_settings().openai.api_version
-            if get_settings().get("OPENAI.API_BASE", None):
-                litellm.api_base = get_settings().openai.api_base
-            if get_settings().get("ANTHROPIC.KEY", None):
-                litellm.anthropic_key = get_settings().anthropic.key
-            if get_settings().get("COHERE.KEY", None):
-                litellm.cohere_key = get_settings().cohere.key
-            if get_settings().get("REPLICATE.KEY", None):
-                litellm.replicate_key = get_settings().replicate.key
-            if get_settings().get("REPLICATE.KEY", None):
-                litellm.replicate_key = get_settings().replicate.key
-            if get_settings().get("HUGGINGFACE.KEY", None):
-                litellm.huggingface_key = get_settings().huggingface.key
-                if get_settings().get("HUGGINGFACE.API_BASE", None):
-                    litellm.api_base = get_settings().huggingface.api_base
-        except AttributeError as e:
-            raise ValueError("OpenAI key is required") from e
+        if get_settings().get("litellm.use_client"):
+            litellm_token = get_settings().get("litellm.LITELLM_TOKEN")
+            assert litellm_token, "LITELLM_TOKEN is required"
+            os.environ["LITELLM_TOKEN"] = litellm_token
+            litellm.use_client = True
+        if get_settings().get("OPENAI.ORG", None):
+            litellm.organization = get_settings().openai.org
+        if get_settings().get("OPENAI.API_TYPE", None):
+            if get_settings().openai.api_type == "azure":
+                self.azure = True
+                litellm.azure_key = get_settings().openai.key
+        if get_settings().get("OPENAI.API_VERSION", None):
+            litellm.api_version = get_settings().openai.api_version
+        if get_settings().get("OPENAI.API_BASE", None):
+            litellm.api_base = get_settings().openai.api_base
+        if get_settings().get("ANTHROPIC.KEY", None):
+            litellm.anthropic_key = get_settings().anthropic.key
+        if get_settings().get("COHERE.KEY", None):
+            litellm.cohere_key = get_settings().cohere.key
+        if get_settings().get("REPLICATE.KEY", None):
+            litellm.replicate_key = get_settings().replicate.key
+        if get_settings().get("REPLICATE.KEY", None):
+            litellm.replicate_key = get_settings().replicate.key
+        if get_settings().get("HUGGINGFACE.KEY", None):
+            litellm.huggingface_key = get_settings().huggingface.key
+            if get_settings().get("HUGGINGFACE.API_BASE", None):
+                litellm.api_base = get_settings().huggingface.api_base
+        if get_settings().get("VERTEXAI.VERTEX_PROJECT", None):
+            litellm.vertex_project = get_settings().vertexai.vertex_project
+            litellm.vertex_location = get_settings().get(
+                "VERTEXAI.VERTEX_LOCATION", None
+            )
+        if get_settings().get("AWS.BEDROCK_REGION", None):
+            litellm.AmazonAnthropicConfig.max_tokens_to_sample = 2000
+            self.aws_bedrock_client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=get_settings().aws.bedrock_region,
+            )
 
     @property
     def deployment_id(self):
@@ -96,13 +108,16 @@ class AiHandler:
             if self.azure:
                 model = 'azure/' + model
             messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-            response = await acompletion(
-                model=model,
-                deployment_id=deployment_id,
-                messages=messages,
-                temperature=temperature,
-                force_timeout=get_settings().config.ai_timeout
-            )
+            kwargs = {
+                "model": model,
+                "deployment_id": deployment_id,
+                "messages": messages,
+                "temperature": temperature,
+                "force_timeout": get_settings().config.ai_timeout,
+            }
+            if self.aws_bedrock_client:
+                kwargs["aws_bedrock_client"] = self.aws_bedrock_client
+            response = await acompletion(**kwargs)
         except (APIError, Timeout, TryAgain) as e:
             get_logger().error("Error during OpenAI inference: ", e)
             raise

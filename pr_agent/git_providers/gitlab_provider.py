@@ -7,8 +7,8 @@ import gitlab
 from gitlab import GitlabGetError
 
 from ..algo.language_handler import is_valid_file
-from ..algo.pr_processing import clip_tokens, find_line_number_of_relevant_line_in_file
-from ..algo.utils import load_large_diff
+from ..algo.pr_processing import find_line_number_of_relevant_line_in_file
+from ..algo.utils import load_large_diff, clip_tokens
 from ..config_loader import get_settings
 from .git_provider import EDIT_TYPE, FilePatchInfo, GitProvider
 from ..log import get_logger
@@ -37,13 +37,14 @@ class GitLabProvider(GitProvider):
         self.diff_files = None
         self.git_files = None
         self.temp_comments = []
+        self.pr_url = merge_request_url
         self._set_merge_request(merge_request_url)
         self.RE_HUNK_HEADER = re.compile(
             r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[ ]?(.*)")
         self.incremental = incremental
 
     def is_supported(self, capability: str) -> bool:
-        if capability in ['get_issue_comments', 'create_inline_comment', 'publish_inline_comments', 'gfm_markdown']:
+        if capability in ['get_issue_comments', 'create_inline_comment', 'publish_inline_comments']: # gfm_markdown is supported in gitlab !
             return False
         return True
 
@@ -114,12 +115,20 @@ class GitLabProvider(GitProvider):
                 if not patch:
                     patch = load_large_diff(filename, new_file_content_str, original_file_content_str)
 
+
+                # count number of lines added and removed
+                patch_lines = patch.splitlines(keepends=True)
+                num_plus_lines = len([line for line in patch_lines if line.startswith('+')])
+                num_minus_lines = len([line for line in patch_lines if line.startswith('-')])
                 diff_files.append(
                     FilePatchInfo(original_file_content_str, new_file_content_str,
                                   patch=patch,
                                   filename=filename,
                                   edit_type=edit_type,
-                                  old_filename=None if diff['old_path'] == diff['new_path'] else diff['old_path']))
+                                  old_filename=None if diff['old_path'] == diff['new_path'] else diff['old_path'],
+                                  num_plus_lines=num_plus_lines,
+                                  num_minus_lines=num_minus_lines, ))
+
         self.diff_files = diff_files
         return diff_files
 
@@ -135,6 +144,33 @@ class GitLabProvider(GitProvider):
             self.mr.save()
         except Exception as e:
             get_logger().exception(f"Could not update merge request {self.id_mr} description: {e}")
+
+    def get_latest_commit_url(self):
+        return self.mr.commits().next().web_url
+
+    def get_comment_url(self, comment):
+        return f"{self.mr.web_url}#note_{comment.id}"
+
+    def publish_persistent_comment(self, pr_comment: str, initial_header: str, update_header: bool = True):
+        try:
+            for comment in self.mr.notes.list(get_all=True)[::-1]:
+                if comment.body.startswith(initial_header):
+                    latest_commit_url = self.get_latest_commit_url()
+                    comment_url = self.get_comment_url(comment)
+                    if update_header:
+                        updated_header = f"{initial_header}\n\n### (review updated until commit {latest_commit_url})\n"
+                        pr_comment_updated = pr_comment.replace(initial_header, updated_header)
+                    else:
+                        pr_comment_updated = pr_comment
+                    get_logger().info(f"Persistent mode- updating comment {comment_url} to latest review message")
+                    response = self.mr.notes.update(comment.id, {'body': pr_comment_updated})
+                    self.publish_comment(
+                        f"**[Persistent review]({comment_url})** updated to latest commit {latest_commit_url}")
+                    return
+        except Exception as e:
+            get_logger().exception(f"Failed to update persistent review, error: {e}")
+            pass
+        self.publish_comment(pr_comment)
 
     def publish_comment(self, mr_comment: str, is_temporary: bool = False):
         comment = self.mr.notes.create({'body': mr_comment})
@@ -175,7 +211,11 @@ class GitLabProvider(GitProvider):
                 pos_obj['new_line'] = target_line_no - 1
                 pos_obj['old_line'] = source_line_no - 1
             get_logger().debug(f"Creating comment in {self.id_mr} with body {body} and position {pos_obj}")
-            self.mr.discussions.create({'body': body, 'position': pos_obj})
+            try:
+                self.mr.discussions.create({'body': body, 'position': pos_obj})
+            except Exception as e:
+                get_logger().debug(
+                    f"Failed to create comment in {self.id_mr} with position {pos_obj} (probably not a '+' line)")
 
     def get_relevant_diff(self, relevant_file: str, relevant_line_in_file: int) -> Optional[dict]:
         changes = self.mr.changes()  # Retrieve the changes for the merge request once
@@ -287,9 +327,15 @@ class GitLabProvider(GitProvider):
     def remove_initial_comment(self):
         try:
             for comment in self.temp_comments:
-                comment.delete()
+                self.remove_comment(comment)
         except Exception as e:
             get_logger().exception(f"Failed to remove temp comments, error: {e}")
+
+    def remove_comment(self, comment):
+        try:
+            comment.delete()
+        except Exception as e:
+            get_logger().exception(f"Failed to remove comment, error: {e}")
 
     def get_title(self):
         return self.mr.title
@@ -309,7 +355,7 @@ class GitLabProvider(GitProvider):
 
     def get_repo_settings(self):
         try:
-            contents = self.gl.projects.get(self.id_project).files.get(file_path='.pr_agent.toml', ref=self.mr.source_branch)
+            contents = self.gl.projects.get(self.id_project).files.get(file_path='.pr_agent.toml', ref=self.mr.target_branch).decode()
             return contents
         except Exception:
             return ""
@@ -362,7 +408,7 @@ class GitLabProvider(GitProvider):
     def publish_inline_comments(self, comments: list[dict]):
         pass
 
-    def get_labels(self):
+    def get_pr_labels(self):
         return self.mr.labels
 
     def get_commit_messages(self):
@@ -388,6 +434,16 @@ class GitLabProvider(GitProvider):
             return pr_id
         except:
             return ""
+
+    def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:
+        if relevant_line_start == -1:
+            link = f"https://gitlab.com/codiumai/pr-agent/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads"
+        elif relevant_line_end:
+            link = f"https://gitlab.com/codiumai/pr-agent/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads#L{relevant_line_start}-L{relevant_line_end}"
+        else:
+            link = f"https://gitlab.com/codiumai/pr-agent/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads#L{relevant_line_start}"
+        return link
+
 
     def generate_link_to_relevant_line_number(self, suggestion) -> str:
         try:

@@ -2,8 +2,13 @@
 
 <div align="center">
 
-<img src="./pics/logo-dark.png#gh-dark-mode-only" width="330"/>
-<img src="./pics/logo-light.png#gh-light-mode-only" width="330"/><br/>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://codium.ai/images/pr_agent/logo-dark.png" width="330">
+  <source media="(prefers-color-scheme: light)" srcset="https://codium.ai/images/pr_agent/logo-light.png" width="330">
+  <img alt="logo">
+</picture>
+<br/>
 Making pull requests less painful with an AI agent
 </div>
 
@@ -16,7 +21,7 @@ Making pull requests less painful with an AI agent
 </div>
 <div style="text-align:left;">
 
-CodiumAI `PR-Agent` is an open-source tool aiming to help developers review pull requests faster and more efficiently. It automatically analyzes the pull request and can provide several types of commands:
+CodiumAI `PR-Agent` is an open-source tool for efficient pull request reviewing and handling. It automatically analyzes the pull request and can provide several types of commands:
 
 ‣ **Auto Description ([`/describe`](./docs/DESCRIBE.md))**: Automatically generating PR description - title, type, summary, code walkthrough and labels.
 \
@@ -28,15 +33,17 @@ CodiumAI `PR-Agent` is an open-source tool aiming to help developers review pull
 \
 ‣ **Update Changelog ([`/update_changelog`](./docs/UPDATE_CHANGELOG.md))**: Automatically updating the CHANGELOG.md file with the PR changes.
 \
-‣ **Find similar issue ([`/similar_issue`](./docs/SIMILAR_ISSUE.md))**: Automatically retrieves and presents similar issues
+‣ **Find Similar Issue ([`/similar_issue`](./docs/SIMILAR_ISSUE.md))**: Automatically retrieves and presents similar issues.
 \
 ‣ **Add Documentation ([`/add_docs`](./docs/ADD_DOCUMENTATION.md))**: Automatically adds documentation to un-documented functions/classes in the PR.
+\
+‣ **Generate Custom Labels ([`/generate_labels`](./docs/GENERATE_CUSTOM_LABELS.md))**: Automatically suggests custom labels based on the PR code changes.
 
-See the [Usage Guide](./Usage.md) for instructions how to run the different tools from _CLI_, _online usage_, Or by _automatically triggering_ them when a new PR is opened.
+See the [Installation Guide](./INSTALL.md) for instructions on installing and running the tool on different git platforms.
 
-See the [Tools Guide](./docs/TOOLS_GUIDE.md) for detailed description of the different tools.
+See the [Usage Guide](./Usage.md) for running the PR-Agent commands via different interfaces, including _CLI_, _online usage_, or by _automatically triggering_ them when a new PR is opened.
 
-See the [Release notes](./RELEASE_NOTES.md) for updates on the latest changes.
+See the [Tools Guide](./docs/TOOLS_GUIDE.md) for detailed description of the different tools (tools are run via the commands).
 
 <h3>Example results:</h3>
 </div>
@@ -115,6 +122,7 @@ See the [Release notes](./RELEASE_NOTES.md) for updates on the latest changes.
 |       | Update CHANGELOG.md                         |   :white_check_mark:    |   :white_check_mark:    |   :white_check_mark:        |   :white_check_mark:    |          |       |
 |       | Find similar issue                          |   :white_check_mark:    |                         |                             |          |          |       |
 |       | Add Documentation                           |   :white_check_mark:    |   :white_check_mark:    |   :white_check_mark:        |   :white_check_mark:    |          |    :white_check_mark:    |
+|       | Generate Labels                           |   :white_check_mark:    |   :white_check_mark:    |         |     |          |      |
 |       |                                             |        |        |      |      |      |
 | USAGE | CLI                                         |   :white_check_mark:    |   :white_check_mark:    |   :white_check_mark:       |   :white_check_mark:    |   :white_check_mark:    |
 |       | App / webhook                               |   :white_check_mark:    |   :white_check_mark:    |           |          |          |
@@ -132,7 +140,7 @@ Review the [usage guide](./Usage.md) section for detailed instructions how to us
 
 ## Try it now
 
-You can try GPT-4 powered PR-Agent, on your public GitHub repository, instantly. Just mention `@CodiumAI-Agent` and add the desired command in any PR comment. The agent will generate a response based on your command.
+Try the GPT-4 powered PR-Agent instantly on _your public GitHub repository_. Just mention `@CodiumAI-Agent` and add the desired command in any PR comment. The agent will generate a response based on your command.
 For example, add a comment to any pull request with the following text:
 ```
 @CodiumAI-Agent /review
@@ -143,6 +151,7 @@ and the agent will respond with a review of your PR
 
 
 To set up your own PR-Agent, see the [Installation](#installation) section below.
+Note that when you set your own PR-Agent or use CodiumAI hosted PR-Agent, there is no need to mention `@CodiumAI-Agent ...`. Instead, directly start with the command, e.g., `/ask ...`.
 
 ---
 
@@ -171,7 +180,7 @@ There are several ways to use PR-Agent:
 
 The following diagram illustrates PR-Agent tools and their flow:
 
-![PR-Agent Tools](https://www.codium.ai/wp-content/uploads/2023/10/codiumai-diagram-v5.png)
+![PR-Agent Tools](https://codium.ai/images/pr_agent/diagram-v0.9.png)
 
 Check out the [PR Compression strategy](./PR_COMPRESSION.md) page for more details on how we convert a code diff to a manageable LLM prompt
 
@@ -204,6 +213,9 @@ Here are some advantages of PR-Agent:
   - [x] Documentation (is the PR properly documented)
   - [ ] ...
 
+See the [Release notes](./RELEASE_NOTES.md) for updates on the latest changes.
+
+
 ## Similar Projects
 
 - [CodiumAI - Meaningful tests for busy devs](https://github.com/Codium-ai/codiumai-vscode-release) (although various capabilities are much more advanced in the CodiumAI IDE plugins)
@@ -211,7 +223,15 @@ Here are some advantages of PR-Agent:
 - [openai-pr-reviewer](https://github.com/coderabbitai/openai-pr-reviewer)
 - [CodeReview BOT](https://github.com/anc95/ChatGPT-CodeReview)
 - [AI-Maintainer](https://github.com/merwanehamadi/AI-Maintainer)
-  
+
+## Data Privacy
+
+If you use a self-hosted PR-Agent with your OpenAI API key, it is between you and OpenAI. You can read their API data privacy policy here:
+https://openai.com/enterprise-privacy
+
+When using a PR-Agent app hosted by CodiumAI, we will not store any of your data, nor will we used it for training.
+You will also benefit from an OpenAI account with zero data retention.
+
 ## Links
 
 [![Join our Discord community](https://raw.githubusercontent.com/Codium-ai/codiumai-vscode-release/main/media/docs/Joincommunity.png)](https://discord.gg/kG35uSHDBc)

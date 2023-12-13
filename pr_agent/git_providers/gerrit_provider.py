@@ -192,7 +192,7 @@ class GerritProvider(GitProvider):
         )
         self.repo = Repo(self.repo_path)
         assert self.repo
-
+        self.pr_url = base_url
         self.pr = PullRequestMimic(self.get_pr_title(), self.get_diff_files())
 
     def get_pr_title(self):
@@ -207,7 +207,7 @@ class GerritProvider(GitProvider):
         Comment = namedtuple('Comment', ['body'])
         return Comments([Comment(c['message']) for c in reversed(comments)])
 
-    def get_labels(self):
+    def get_pr_labels(self):
         raise NotImplementedError(
             'Getting labels is not implemented for the gerrit provider')
 
@@ -394,6 +394,9 @@ class GerritProvider(GitProvider):
     def remove_initial_comment(self):
         # remove repo, cloned in previous steps
         # shutil.rmtree(self.repo_path)
+        pass
+
+    def remove_comment(self, comment):
         pass
 
     def get_pr_branch(self):

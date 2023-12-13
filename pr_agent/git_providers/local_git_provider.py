@@ -140,6 +140,9 @@ class LocalGitProvider(GitProvider):
     def remove_initial_comment(self):
         pass  # Not applicable to the local git provider, but required by the interface
 
+    def remove_comment(self, comment):
+        pass  # Not applicable to the local git provider, but required by the interface
+
     def get_languages(self):
         """
         Calculate percentage of languages in repository. Used for hunk prioritisation.
@@ -175,5 +178,5 @@ class LocalGitProvider(GitProvider):
     def get_issue_comments(self):
         raise NotImplementedError('Getting issue comments is not implemented for the local git provider')
 
-    def get_labels(self):
+    def get_pr_labels(self):
         raise NotImplementedError('Getting labels is not implemented for the local git provider')
