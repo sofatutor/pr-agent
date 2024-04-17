@@ -9,6 +9,10 @@ MAX_TOKENS = {
     'gpt-4-0613': 8000,
     'gpt-4-32k': 32000,
     'gpt-4-1106-preview': 128000, # 128K, but may be limited by config.max_model_tokens
+    'gpt-4-0125-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4-turbo-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4-turbo-2024-04-09': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4-turbo': 128000,  # 128K, but may be limited by config.max_model_tokens
     'claude-instant-1': 100000,
     'claude-2': 100000,
     'command-nightly': 4096,
@@ -18,7 +22,13 @@ MAX_TOKENS = {
     'vertex_ai/codechat-bison-32k': 32000,
     'codechat-bison': 6144,
     'codechat-bison-32k': 32000,
-    'anthropic.claude-v2': 100000,
     'anthropic.claude-instant-v1': 100000,
     'anthropic.claude-v1': 100000,
+    'anthropic.claude-v2': 100000,
+    'anthropic/claude-3-opus-20240229': 100000,
+    'bedrock/anthropic.claude-instant-v1': 100000,
+    'bedrock/anthropic.claude-v2': 100000,
+    'bedrock/anthropic.claude-v2:1': 100000,
+    'bedrock/anthropic.claude-3-sonnet-20240229-v1:0': 100000,
+    'bedrock/anthropic.claude-3-haiku-20240307-v1:0': 100000,
 }

@@ -13,7 +13,8 @@ import urllib3.util
 from git import Repo
 
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.git_provider import EDIT_TYPE, FilePatchInfo, GitProvider
+from pr_agent.git_providers.git_provider import GitProvider
+from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from pr_agent.git_providers.local_git_provider import PullRequestMimic
 from pr_agent.log import get_logger
 
@@ -207,11 +208,11 @@ class GerritProvider(GitProvider):
         Comment = namedtuple('Comment', ['body'])
         return Comments([Comment(c['message']) for c in reversed(comments)])
 
-    def get_pr_labels(self):
+    def get_pr_labels(self, update=False):
         raise NotImplementedError(
             'Getting labels is not implemented for the gerrit provider')
 
-    def add_eyes_reaction(self, issue_comment_id: int):
+    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False):
         raise NotImplementedError(
             'Adding reactions is not implemented for the gerrit provider')
 
@@ -380,11 +381,6 @@ class GerritProvider(GitProvider):
             'Publishing inline comments is not implemented for the gerrit '
             'provider')
 
-    def create_inline_comment(self, body: str, relevant_file: str,
-                              relevant_line_in_file: str):
-        raise NotImplementedError(
-            'Creating inline comments is not implemented for the gerrit '
-            'provider')
 
     def publish_labels(self, labels):
         # Not applicable to the local git provider,

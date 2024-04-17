@@ -2,19 +2,25 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import re
 import textwrap
 from datetime import datetime
-from typing import Any, List
+from enum import Enum
+from typing import Any, List, Tuple
 
 import yaml
 from starlette_context import context
 
 from pr_agent.algo import MAX_TOKENS
-from pr_agent.algo.token_handler import get_token_encoder
+from pr_agent.algo.token_handler import TokenEncoder
 from pr_agent.config_loader import get_settings, global_settings
+from pr_agent.algo.types import FilePatchInfo
 from pr_agent.log import get_logger
 
+class ModelType(str, Enum):
+    REGULAR = "regular"
+    TURBO = "turbo"
 
 def get_setting(key: str) -> Any:
     try:
@@ -23,7 +29,39 @@ def get_setting(key: str) -> Any:
     except Exception:
         return global_settings.get(key, None)
 
-def convert_to_markdown(output_data: dict, gfm_supported: bool=True) -> str:
+
+def emphasize_header(text: str) -> str:
+    try:
+        # Finding the position of the first occurrence of ": "
+        colon_position = text.find(": ")
+
+        # Splitting the string and wrapping the first part in <strong> tags
+        if colon_position != -1:
+            # Everything before the colon (inclusive) is wrapped in <strong> tags
+            transformed_string = "<strong>" + text[:colon_position + 1] + "</strong>" + text[colon_position + 1:]
+        else:
+            # If there's no ": ", return the original string
+            transformed_string = text
+
+        return transformed_string
+    except Exception as e:
+        get_logger().exception(f"Failed to emphasize header: {e}")
+        return text
+
+
+def unique_strings(input_list: List[str]) -> List[str]:
+    if not input_list or not isinstance(input_list, list):
+        return input_list
+    seen = set()
+    unique_list = []
+    for item in input_list:
+        if item not in seen:
+            unique_list.append(item)
+            seen.add(item)
+    return unique_list
+
+
+def convert_to_markdown(output_data: dict, gfm_supported: bool = True, incremental_review=None) -> str:
     """
     Convert a dictionary of data into markdown format.
     Args:
@@ -31,85 +69,157 @@ def convert_to_markdown(output_data: dict, gfm_supported: bool=True) -> str:
     Returns:
         str: The markdown formatted text generated from the input dictionary.
     """    
-    markdown_text = ""
 
     emojis = {
-        "Main theme": "🎯",
-        "PR summary": "📝",
-        "Type of PR": "📌",
+        "Can be split": "🔀",
+        "Possible issues": "🔍",
         "Score": "🏅",
-        "Relevant tests added": "🧪",
-        "Unrelated changes": "⚠️",
+        "Relevant tests": "🧪",
         "Focused PR": "✨",
         "Security concerns": "🔒",
-        "General suggestions": "💡",
         "Insights from user's answers": "📝",
         "Code feedback": "🤖",
         "Estimated effort to review [1-5]": "⏱️",
     }
+    markdown_text = ""
+    if not incremental_review:
+        markdown_text += f"## PR Review\n\n"
+    else:
+        markdown_text += f"## Incremental PR Review\n\n"
+        markdown_text += f"⏮️ Review for commits since previous PR-Agent review {incremental_review}.\n\n"
+    if gfm_supported:
+        markdown_text += "<table>\n<tr>\n"
+        # markdown_text += """<td> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Feedback&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td> <td></td></tr>"""
 
-    for key, value in output_data.items():
-        if value is None or value == '' or value == {}:
-            continue
-        if isinstance(value, dict):
-            markdown_text += f"## {key}\n\n"
-            markdown_text += convert_to_markdown(value, gfm_supported)
-        elif isinstance(value, list):
-            emoji = emojis.get(key, "")
-            if key.lower() == 'code feedback':
-                if gfm_supported:
-                    markdown_text += f"\n\n- "
-                    markdown_text += f"<details><summary> { emoji } Code feedback:</summary>"
+    if not output_data or not output_data.get('review', {}):
+        return ""
+
+    for key, value in output_data['review'].items():
+        if value is None or value == '' or value == {} or value == []:
+            if key.lower() != 'can_be_split':
+                continue
+        key_nice = key.replace('_', ' ').capitalize()
+        emoji = emojis.get(key_nice, "")
+        if gfm_supported:
+            if 'Estimated effort to review' in key_nice:
+                key_nice = 'Estimated&nbsp;effort&nbsp;to&nbsp;review [1-5]'
+            if 'security concerns' in key_nice.lower():
+                value = emphasize_header(value.strip())
+                markdown_text += f"<tr><td> {emoji}&nbsp;<strong>{key_nice}</strong></td><td>\n\n{value}\n\n</td></tr>\n"
+            elif 'can be split' in key_nice.lower():
+                markdown_text += process_can_be_split(emoji, value)
+            elif 'possible issues' in key_nice.lower():
+                value = value.strip()
+                issues = value.split('\n- ')
+                for i, _ in enumerate(issues):
+                    issues[i] = issues[i].strip().strip('-').strip()
+                issues = unique_strings(issues) # remove duplicates
+                number_of_issues = len(issues)
+                if number_of_issues > 1:
+                    markdown_text += f"<tr><td rowspan={number_of_issues}> {emoji}&nbsp;<strong>{key_nice}</strong></td>\n"
+                    for i, issue in enumerate(issues):
+                        if not issue:
+                            continue
+                        issue = emphasize_header(issue)
+                        if i == 0:
+                            markdown_text += f"<td>\n\n{issue}</td></tr>\n"
+                        else:
+                            markdown_text += f"<tr>\n<td>\n\n{issue}</td></tr>\n"
                 else:
-                    markdown_text += f"\n\n- **{emoji} Code feedback:**\n\n"
+                    value = emphasize_header(value.strip('-').strip())
+                    markdown_text += f"<tr><td> {emoji}&nbsp;<strong>{key_nice}</strong></td><td>\n\n{value}\n\n</td></tr>\n"
             else:
-                markdown_text += f"- {emoji} **{key}:**\n\n"
-            for i, item in enumerate(value):
-                if isinstance(item, dict) and key.lower() == 'code feedback':
-                    markdown_text += parse_code_suggestion(item, i, gfm_supported)
-                elif item:
-                    markdown_text += f"  - {item}\n"
-            if key.lower() == 'code feedback':
-                if gfm_supported:
-                    markdown_text += "</details>\n\n"
-                else:
-                    markdown_text += "\n\n"
-        elif value != 'n/a':
-            emoji = emojis.get(key, "")
-            markdown_text += f"- {emoji} **{key}:** {value}\n"
+                markdown_text += f"<tr><td> {emoji}&nbsp;<strong>{key_nice}</strong></td><td>\n\n{value}\n\n</td></tr>\n"
+        else:
+            if len(value.split()) > 1:
+                markdown_text += f"{emoji} **{key_nice}:**\n\n {value}\n\n"
+            else:
+                markdown_text += f"{emoji} **{key_nice}:** {value}\n\n"
+    if gfm_supported:
+        markdown_text += "</table>\n"
+
+    if 'code_feedback' in output_data:
+        if gfm_supported:
+            markdown_text += f"\n\n"
+            markdown_text += f"<details><summary> <strong>Code feedback:</strong></summary>\n\n"
+            markdown_text += "<hr>"
+        else:
+            markdown_text += f"\n\n** Code feedback:**\n\n"
+        for i, value in enumerate(output_data['code_feedback']):
+            if value is None or value == '' or value == {} or value == []:
+                continue
+            markdown_text += parse_code_suggestion(value, i, gfm_supported)+"\n\n"
+        if markdown_text.endswith('<hr>'):
+            markdown_text = markdown_text[:-4]
+        if gfm_supported:
+            markdown_text += f"</details>"
+    #print(markdown_text)
+
+
     return markdown_text
 
 
-def parse_code_suggestion(code_suggestions: dict, i: int = 0, gfm_supported: bool = True) -> str:
+def process_can_be_split(emoji, value):
+    # key_nice = "Can this PR be split?"
+    key_nice = "Multiple PR themes"
+    markdown_text = ""
+    if not value or isinstance(value, list) and len(value) == 1:
+        value = "No"
+        markdown_text += f"<tr><td> {emoji}&nbsp;<strong>{key_nice}</strong></td><td>\n\n{value}\n\n</td></tr>\n"
+    else:
+        number_of_splits = len(value)
+        markdown_text += f"<tr><td rowspan={number_of_splits}> {emoji}&nbsp;<strong>{key_nice}</strong></td>\n"
+        for i, split in enumerate(value):
+            title = split.get('title', '')
+            relevant_files = split.get('relevant_files', [])
+            if i == 0:
+                markdown_text += f"<td><details><summary>\nSub-PR theme: <strong>{title}</strong></summary>\n\n"
+                markdown_text += f"<hr>\n"
+                markdown_text += f"Relevant files:\n"
+                markdown_text += f"<ul>\n"
+                for file in relevant_files:
+                    markdown_text += f"<li>{file}</li>\n"
+                markdown_text += f"</ul>\n\n</details></td></tr>\n"
+            else:
+                markdown_text += f"<tr>\n<td><details><summary>\nSub-PR theme: <strong>{title}</strong></summary>\n\n"
+                markdown_text += f"<hr>\n"
+                markdown_text += f"Relevant files:\n"
+                markdown_text += f"<ul>\n"
+                for file in relevant_files:
+                    markdown_text += f"<li>{file}</li>\n"
+                markdown_text += f"</ul>\n\n</details></td></tr>\n"
+    return markdown_text
+
+
+def parse_code_suggestion(code_suggestion: dict, i: int = 0, gfm_supported: bool = True) -> str:
     """
     Convert a dictionary of data into markdown format.
 
     Args:
-        code_suggestions (dict): A dictionary containing data to be converted to markdown format.
+        code_suggestion (dict): A dictionary containing data to be converted to markdown format.
 
     Returns:
         str: A string containing the markdown formatted text generated from the input dictionary.
     """
     markdown_text = ""
-    if gfm_supported and 'relevant line' in code_suggestions:
-        if i == 0:
-            markdown_text += "<hr>"
+    if gfm_supported and 'relevant_line' in code_suggestion:
         markdown_text += '<table>'
-        for sub_key, sub_value in code_suggestions.items():
+        for sub_key, sub_value in code_suggestion.items():
             try:
-                if sub_key.lower() == 'relevant file':
+                if sub_key.lower() == 'relevant_file':
                     relevant_file = sub_value.strip('`').strip('"').strip("'")
-                    markdown_text += f"<tr><td>{sub_key}</td><td>{relevant_file}</td></tr>"
+                    markdown_text += f"<tr><td>relevant file</td><td>{relevant_file}</td></tr>"
                     # continue
                 elif sub_key.lower() == 'suggestion':
-                    markdown_text += f"<tr><td>{sub_key} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td><strong>{sub_value}</strong></td></tr>"
-                elif sub_key.lower() == 'relevant line':
+                    markdown_text += (f"<tr><td>{sub_key} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>"
+                                      f"<td>\n\n<strong>\n\n{sub_value.strip()}\n\n</strong>\n</td></tr>")
+                elif sub_key.lower() == 'relevant_line':
                     markdown_text += f"<tr><td>relevant line</td>"
                     sub_value_list = sub_value.split('](')
                     relevant_line = sub_value_list[0].lstrip('`').lstrip('[')
                     if len(sub_value_list) > 1:
                         link = sub_value_list[1].rstrip(')').strip('`')
-                        markdown_text += f"<td><a href={link}>{relevant_line}</a></td>"
+                        markdown_text += f"<td><a href='{link}'>{relevant_line}</a></td>"
                     else:
                         markdown_text += f"<td>{relevant_line}</td>"
                     markdown_text += "</tr>"
@@ -119,7 +229,11 @@ def parse_code_suggestion(code_suggestions: dict, i: int = 0, gfm_supported: boo
         markdown_text += '</table>'
         markdown_text += "<hr>"
     else:
-        for sub_key, sub_value in code_suggestions.items():
+        for sub_key, sub_value in code_suggestion.items():
+            if isinstance(sub_key, str):
+                sub_key = sub_key.rstrip()
+            if isinstance(sub_value,str):
+                sub_value = sub_value.rstrip()
             if isinstance(sub_value, dict):  # "code example"
                 markdown_text += f"  - **{sub_key}:**\n"
                 for code_key, code_value in sub_value.items():  # 'before' and 'after' code
@@ -127,14 +241,13 @@ def parse_code_suggestion(code_suggestions: dict, i: int = 0, gfm_supported: boo
                     code_str_indented = textwrap.indent(code_str, '        ')
                     markdown_text += f"    - **{code_key}:**\n{code_str_indented}\n"
             else:
-                if "relevant file" in sub_key.lower():
+                if "relevant_file" in sub_key.lower():
                     markdown_text += f"\n  - **{sub_key}:** {sub_value}  \n"
                 else:
                     markdown_text += f"   **{sub_key}:** {sub_value}  \n"
-                if not gfm_supported:
-                    if "relevant line" not in sub_key.lower():  # nicer presentation
-                        # markdown_text = markdown_text.rstrip('\n') + "\\\n" # works for gitlab
-                        markdown_text = markdown_text.rstrip('\n') + "   \n"  # works for gitlab and bitbucker
+                if "relevant_line" not in sub_key.lower():  # nicer presentation
+                    # markdown_text = markdown_text.rstrip('\n') + "\\\n" # works for gitlab
+                    markdown_text = markdown_text.rstrip('\n') + "   \n"  # works for gitlab and bitbucker
 
         markdown_text += "\n"
     return markdown_text
@@ -316,19 +429,21 @@ def _fix_key_value(key: str, value: str):
     return key, value
 
 
-def load_yaml(response_text: str) -> dict:
+def load_yaml(response_text: str, keys_fix_yaml: List[str] = []) -> dict:
     response_text = response_text.removeprefix('```yaml').rstrip('`')
     try:
         data = yaml.safe_load(response_text)
     except Exception as e:
         get_logger().error(f"Failed to parse AI prediction: {e}")
-        data = try_fix_yaml(response_text)
+        data = try_fix_yaml(response_text, keys_fix_yaml=keys_fix_yaml)
     return data
 
-def try_fix_yaml(response_text: str) -> dict:
+
+def try_fix_yaml(response_text: str, keys_fix_yaml: List[str] = []) -> dict:
     response_text_lines = response_text.split('\n')
 
-    keys = ['relevant line:', 'suggestion content:', 'relevant file:']
+    keys = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:', 'improved code:']
+    keys = keys + keys_fix_yaml
     # first fallback - try to convert 'relevant line: ...' to relevant line: |-\n        ...'
     response_text_lines_copy = response_text_lines.copy()
     for i in range(0, len(response_text_lines_copy)):
@@ -343,25 +458,37 @@ def try_fix_yaml(response_text: str) -> dict:
     except:
         get_logger().info(f"Failed to parse AI prediction after adding |-\n")
 
-    # second fallback - try to remove last lines
-    data = {}
-    for i in range(1, len(response_text_lines)):
-        response_text_lines_tmp = '\n'.join(response_text_lines[:-i])
+    # second fallback - try to extract only range from first ```yaml to ````
+    snippet_pattern = r'```(yaml)?[\s\S]*?```'
+    snippet = re.search(snippet_pattern, '\n'.join(response_text_lines_copy))
+    if snippet:
+        snippet_text = snippet.group()
         try:
-            data = yaml.safe_load(response_text_lines_tmp,)
-            get_logger().info(f"Successfully parsed AI prediction after removing {i} lines")
-            break
+            data = yaml.safe_load(snippet_text.removeprefix('```yaml').rstrip('`'))
+            get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
+            return data
         except:
             pass
-    
-    # thrid fallback - try to remove leading and trailing curly brackets
-    response_text_copy = response_text.strip().rstrip().removeprefix('{').removesuffix('}')
+
+     # third fallback - try to remove leading and trailing curly brackets
+    response_text_copy = response_text.strip().rstrip().removeprefix('{').removesuffix('}').rstrip(':\n')
     try:
-        data = yaml.safe_load(response_text_copy,)
+        data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after removing curly brackets")
         return data
     except:
         pass
+
+    # fourth fallback - try to remove last lines
+    data = {}
+    for i in range(1, len(response_text_lines)):
+        response_text_lines_tmp = '\n'.join(response_text_lines[:-i])
+        try:
+            data = yaml.safe_load(response_text_lines_tmp)
+            get_logger().info(f"Successfully parsed AI prediction after removing {i} lines")
+            return data
+        except:
+            pass
 
 
 def set_custom_labels(variables, git_provider=None):
@@ -379,9 +506,15 @@ def set_custom_labels(variables, git_provider=None):
 
     # Set custom labels
     variables["custom_labels_class"] = "class Label(str, Enum):"
+    counter = 0
+    labels_minimal_to_labels_dict = {}
     for k, v in labels.items():
-        description = v['description'].strip('\n').replace('\n', '\\n')
-        variables["custom_labels_class"] += f"\n    {k.lower().replace(' ', '_')} = '{k}' # {description}"
+        description = "'" + v['description'].strip('\n').replace('\n', '\\n') + "'"
+        # variables["custom_labels_class"] += f"\n    {k.lower().replace(' ', '_')} = '{k}' # {description}"
+        variables["custom_labels_class"] += f"\n    {k.lower().replace(' ', '_')} = {description}"
+        labels_minimal_to_labels_dict[k.lower().replace(' ', '_')] = k
+        counter += 1
+    variables["labels_minimal_to_labels_dict"] = labels_minimal_to_labels_dict
 
 def get_user_labels(current_labels: List[str] = None):
     """
@@ -399,7 +532,7 @@ def get_user_labels(current_labels: List[str] = None):
                     continue
             user_labels.append(label)
         if user_labels:
-            get_logger().info(f"Keeping user labels: {user_labels}")
+            get_logger().debug(f"Keeping user labels: {user_labels}")
     except Exception as e:
         get_logger().exception(f"Failed to get user labels: {e}")
         return current_labels
@@ -434,7 +567,7 @@ def clip_tokens(text: str, max_tokens: int, add_three_dots=True) -> str:
         return text
 
     try:
-        encoder = get_token_encoder()
+        encoder = TokenEncoder.get_token_encoder()
         num_input_tokens = len(encoder.encode(text))
         if num_input_tokens <= max_tokens:
             return text
@@ -443,8 +576,101 @@ def clip_tokens(text: str, max_tokens: int, add_three_dots=True) -> str:
         num_output_chars = int(chars_per_token * max_tokens)
         clipped_text = text[:num_output_chars]
         if add_three_dots:
-            clipped_text += "...(truncated)"
+            clipped_text += "\n...(truncated)"
         return clipped_text
     except Exception as e:
         get_logger().warning(f"Failed to clip tokens: {e}")
         return text
+
+def replace_code_tags(text):
+    """
+    Replace odd instances of ` with <code> and even instances of ` with </code>
+    """
+    parts = text.split('`')
+    for i in range(1, len(parts), 2):
+        parts[i] = '<code>' + parts[i] + '</code>'
+    return ''.join(parts)
+
+
+def find_line_number_of_relevant_line_in_file(diff_files: List[FilePatchInfo],
+                                              relevant_file: str,
+                                              relevant_line_in_file: str,
+                                              absolute_position: int = None) -> Tuple[int, int]:
+    position = -1
+    if absolute_position is None:
+        absolute_position = -1
+    re_hunk_header = re.compile(
+        r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[ ]?(.*)")
+
+    for file in diff_files:
+        if file.filename and (file.filename.strip() == relevant_file):
+            patch = file.patch
+            patch_lines = patch.splitlines()
+            delta = 0
+            start1, size1, start2, size2 = 0, 0, 0, 0
+            if absolute_position != -1: # matching absolute to relative
+                for i, line in enumerate(patch_lines):
+                    # new hunk
+                    if line.startswith('@@'):
+                        delta = 0
+                        match = re_hunk_header.match(line)
+                        start1, size1, start2, size2 = map(int, match.groups()[:4])
+                    elif not line.startswith('-'):
+                        delta += 1
+
+                    #
+                    absolute_position_curr = start2 + delta - 1
+
+                    if absolute_position_curr == absolute_position:
+                        position = i
+                        break
+            else:
+                # try to find the line in the patch using difflib, with some margin of error
+                matches_difflib: list[str | Any] = difflib.get_close_matches(relevant_line_in_file,
+                                                                             patch_lines, n=3, cutoff=0.93)
+                if len(matches_difflib) == 1 and matches_difflib[0].startswith('+'):
+                    relevant_line_in_file = matches_difflib[0]
+
+
+                for i, line in enumerate(patch_lines):
+                    if line.startswith('@@'):
+                        delta = 0
+                        match = re_hunk_header.match(line)
+                        start1, size1, start2, size2 = map(int, match.groups()[:4])
+                    elif not line.startswith('-'):
+                        delta += 1
+
+                    if relevant_line_in_file in line and line[0] != '-':
+                        position = i
+                        absolute_position = start2 + delta - 1
+                        break
+
+                if position == -1 and relevant_line_in_file[0] == '+':
+                    no_plus_line = relevant_line_in_file[1:].lstrip()
+                    for i, line in enumerate(patch_lines):
+                        if line.startswith('@@'):
+                            delta = 0
+                            match = re_hunk_header.match(line)
+                            start1, size1, start2, size2 = map(int, match.groups()[:4])
+                        elif not line.startswith('-'):
+                            delta += 1
+
+                        if no_plus_line in line and line[0] != '-':
+                            # The model might add a '+' to the beginning of the relevant_line_in_file even if originally
+                            # it's a context line
+                            position = i
+                            absolute_position = start2 + delta - 1
+                            break
+    return position, absolute_position
+
+def github_action_output(output_data: dict, key_name: str):
+    try:
+        if not get_settings().get('github_action_config.enable_output', False):
+            return
+        
+        key_data = output_data.get(key_name, {})
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+            print(f"{key_name}={json.dumps(key_data, indent=None, ensure_ascii=False)}", file=fh)
+    except Exception as e:
+        get_logger().error(f"Failed to write to GitHub Action output: {e}")
+    return

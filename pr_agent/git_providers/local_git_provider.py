@@ -5,7 +5,8 @@ from typing import List
 from git import Repo
 
 from pr_agent.config_loader import _find_repository_root, get_settings
-from pr_agent.git_providers.git_provider import EDIT_TYPE, FilePatchInfo, GitProvider
+from pr_agent.git_providers.git_provider import GitProvider
+from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from pr_agent.log import get_logger
 
 
@@ -121,9 +122,6 @@ class LocalGitProvider(GitProvider):
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str):
         raise NotImplementedError('Publishing inline comments is not implemented for the local git provider')
 
-    def create_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str):
-        raise NotImplementedError('Creating inline comments is not implemented for the local git provider')
-
     def publish_inline_comments(self, comments: list[dict]):
         raise NotImplementedError('Publishing inline comments is not implemented for the local git provider')
 
@@ -178,5 +176,5 @@ class LocalGitProvider(GitProvider):
     def get_issue_comments(self):
         raise NotImplementedError('Getting issue comments is not implemented for the local git provider')
 
-    def get_pr_labels(self):
+    def get_pr_labels(self, update=False):
         raise NotImplementedError('Getting labels is not implemented for the local git provider')

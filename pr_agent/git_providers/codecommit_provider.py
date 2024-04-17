@@ -5,12 +5,12 @@ from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 from pr_agent.git_providers.codecommit_client import CodeCommitClient
-
+from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from ..algo.utils import load_large_diff
-from .git_provider import EDIT_TYPE, FilePatchInfo, GitProvider
+from .git_provider import GitProvider
 from ..config_loader import get_settings
 from ..log import get_logger
-
+from pr_agent.algo.language_handler import is_valid_file
 
 class PullRequestCCMimic:
     """
@@ -216,7 +216,7 @@ class CodeCommitProvider(GitProvider):
     def publish_labels(self, labels):
         return [""]  # not implemented yet
 
-    def get_pr_labels(self):
+    def get_pr_labels(self, update=False):
         return [""]  # not implemented yet
 
     def remove_initial_comment(self):
@@ -228,9 +228,6 @@ class CodeCommitProvider(GitProvider):
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str):
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/codecommit/client/post_comment_for_compared_commit.html
         raise NotImplementedError("CodeCommit provider does not support publishing inline comments yet")
-
-    def create_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str):
-        raise NotImplementedError("CodeCommit provider does not support creating inline comments yet")
 
     def publish_inline_comments(self, comments: list[dict]):
         raise NotImplementedError("CodeCommit provider does not support publishing inline comments yet")
@@ -300,7 +297,7 @@ class CodeCommitProvider(GitProvider):
         settings_filename = ".pr_agent.toml"
         return self.codecommit_client.get_file(self.repo_name, settings_filename, self.pr.source_commit, optional=True)
 
-    def add_eyes_reaction(self, issue_comment_id: int) -> Optional[int]:
+    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
         get_logger().info("CodeCommit provider does not support eyes reaction yet")
         return True
 
