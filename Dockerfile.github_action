@@ -27,7 +27,7 @@ COPY --from=build /usr/local/lib/python3.10/site-packages /usr/local/lib/python3
 # Set Python path
 ENV PYTHONPATH=/app
 
-ENV EXTRA_INSTRUCTIONS
+ENV EXTRA_INSTRUCTIONS=${EXTRA_INSTRUCTIONS}
 
 # Copy the rest of the application
 ADD pr_agent pr_agent
