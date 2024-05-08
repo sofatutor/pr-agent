@@ -43,7 +43,7 @@ def get_settings():
 
 def get_extra_instructions():
     try:
-        return os.environ.get("EXTRA_INSTRUCTIONS", context["settings"])
+        return os.environ.get("EXTRA_INSTRUCTIONS", get_settings().pr_update_changelog.extra_instructions)
     except Exception:
         return global_settings
 
