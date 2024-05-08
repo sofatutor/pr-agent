@@ -9,7 +9,7 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.algo.pr_processing import get_pr_diff, retry_with_fallback_models
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import ModelType
-from pr_agent.config_loader import get_settings
+from pr_agent.config_loader import get_settings, get_extra_instructions
 from pr_agent.git_providers import get_git_provider, GithubProvider
 from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
@@ -41,7 +41,7 @@ class PRUpdateChangelog:
             "diff": "",  # empty diff for initial calculation
             "changelog_file_str": self.changelog_file_str,
             "today": date.today(),
-            "extra_instructions": get_settings().pr_update_changelog.extra_instructions,
+            "extra_instructions": get_extra_instructions(),
             "commit_messages_str": self.git_provider.get_commit_messages(),
         }
         self.token_handler = TokenHandler(self.git_provider.pr,
