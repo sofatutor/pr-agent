@@ -12,6 +12,7 @@ from pr_agent.servers.github_app import handle_line_comments
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 from pr_agent.tools.pr_description import PRDescription
 from pr_agent.tools.pr_reviewer import PRReviewer
+from pr_agent.tools.pr_update_changelog import PRUpdateChangelog
 
 
 def is_true(value: Union[str, bool]) -> bool:
@@ -154,6 +155,13 @@ async def run_action():
                         )
                     else:
                         await PRAgent().handle_request(url, body)
+    elif GITHUB_EVENT_NAME == "pull_request_review":
+        action = event_payload.get("action")
+        if action == "submitted":
+            pr_url = event_payload.get("pull_request", {}).get("html_url")  # Ensure you're getting the correct URL
+            review_state = event_payload.get("review", {}).get("state")
+            if pr_url and review_state == "approved":
+                await PRUpdateChangelog(pr_url).run()
 
 
 if __name__ == '__main__':

@@ -343,3 +343,5 @@ https://openai.com/enterprise-privacy
 - Blog: https://www.codium.ai/blog/
 - Troubleshooting: https://www.codium.ai/blog/technical-faq-and-troubleshooting/
 - Support: support@codium.ai
+
+Patched for sofatutor

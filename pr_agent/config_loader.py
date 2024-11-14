@@ -1,3 +1,5 @@
+import os
+
 from os.path import abspath, dirname, join
 from pathlib import Path
 from typing import Optional
@@ -46,6 +48,13 @@ def get_settings():
     """
     try:
         return context["settings"]
+    except Exception:
+        return global_settings
+
+
+def get_extra_instructions():
+    try:
+        return os.environ.get("EXTRA_INSTRUCTIONS", get_settings().pr_update_changelog.extra_instructions)
     except Exception:
         return global_settings
 
