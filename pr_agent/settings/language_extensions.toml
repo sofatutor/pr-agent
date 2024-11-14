@@ -44,6 +44,7 @@ default = [
     'ss',
     'svg',
     'tar',
+    'tgz',
     'tsv',
     'ttf',
     'war',
@@ -62,6 +63,7 @@ extra = [
 ]
 
 [language_extension_map_org]
+"1C Enterprise" = ["*.bsl", ]
 ABAP = [".abap", ]
 "AGS Script" = [".ash", ]
 AMPL = [".ampl", ]

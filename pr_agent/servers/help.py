@@ -68,10 +68,9 @@ some_config2=...
         output += """\
 - When you first install the app, the [default mode](https://pr-agent-docs.codium.ai/usage-guide/automations_and_usage/#github-app-automatic-tools-when-a-new-pr-is-opened) for the describe tool is:
 ```
-pr_commands = ["/describe --pr_description.add_original_user_description=true" 
-                         "--pr_description.keep_original_user_title=true", ...]
+pr_commands = ["/describe", ...]
 ```
-meaning the `describe` tool will run automatically on every PR, will keep the original title, and will add the original user description above the generated description. 
+meaning the `describe` tool will run automatically on every PR.
 
 - Markers are an alternative way to control the generated description, to give maximal control to the user. If you set:
 ```
@@ -83,7 +82,7 @@ the tool will replace every marker of the form `pr_agent:marker_name` in the PR 
   - `walkthrough`: the PR walkthrough.
 
 Note that when markers are enabled, if the original PR description does not contain any markers, the tool will not alter the description at all.
-        
+
 """
         output += "\n\n</details></td></tr>\n\n"
 
@@ -102,7 +101,7 @@ Examples for custom labels:
 
 The list above is eclectic, and aims to give an idea of different possibilities. Define custom labels that are relevant for your repo and use cases.
 Note that Labels are not mutually exclusive, so you can add multiple label categories.
-Make sure to provide proper title, and a detailed and well-phrased description for each label, so the tool will know when to suggest it.        
+Make sure to provide proper title, and a detailed and well-phrased description for each label, so the tool will know when to suggest it.
 """
         output += "\n\n</details></td></tr>\n\n"
 
@@ -127,7 +126,7 @@ Be specific, clear, and concise in the instructions. With extra instructions, yo
 
 Examples for extra instructions:
 ```
-[pr_description] 
+[pr_description]
 extra_instructions="""\
 - The PR title should be in the format: '<PR type>: <title>'
 - The title should be short and concise (up to 10 words)
@@ -160,8 +159,8 @@ It can be invoked manually by commenting on any PR:
 /ask "..."
 ```
 
-Note that the tool does not have "memory" of previous questions, and answers each question independently.   
-You can ask questions about the entire PR, about specific code lines, or about an image related to the PR code changes.     
+Note that the tool does not have "memory" of previous questions, and answers each question independently.
+You can ask questions about the entire PR, about specific code lines, or about an image related to the PR code changes.
         """
         # output += "\n\n<table>"
         #
@@ -180,7 +179,7 @@ You can ask questions about the entire PR, about specific code lines, or about a
     @staticmethod
     def get_improve_usage_guide():
         output = "**Overview:**\n"
-        output += "The `improve` tool scans the PR code changes, and automatically generates suggestions for improving the PR code. "
+        output += "The code suggestions tool, named `improve`, scans the PR code changes, and automatically generates code suggestions for improving the PR."
         output += "The tool can be triggered [automatically](https://pr-agent-docs.codium.ai/usage-guide/automations_and_usage/#github-app-automatic-tools-when-a-new-pr-is-opened) every time a new PR is opened, or can be invoked manually by commenting on a PR.\n"
         output += """\
 - When commenting, to edit [configurations](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L78) related to the improve tool (`pr_code_suggestions` section), use the following template:
@@ -196,7 +195,7 @@ You can ask questions about the entire PR, about specific code lines, or about a
 some_config1=...
 some_config2=...
 ```
-    
+
 """
 
         output += f"\n\nSee the improve [usage page](https://pr-agent-docs.codium.ai/tools/improve/) for a comprehensive guide on using this tool.\n\n"
