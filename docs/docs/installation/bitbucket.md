@@ -1,3 +1,8 @@
+---
+title: "BitBucket Integration"
+sidebar_position: 6
+---
+
 ## Run as a Bitbucket Pipeline
 
 You can use the Bitbucket Pipeline system to run PR-Agent on every pull request open or update.
@@ -10,7 +15,7 @@ pipelines:
       '**':
         - step:
             name: PR Agent Review
-            image: codiumai/pr-agent:latest
+            image: pragent/pr-agent:latest
             script:
               - pr-agent --pr_url=https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO_SLUG/pull-requests/$BITBUCKET_PR_ID review
 ```
@@ -28,6 +33,24 @@ For basic auth, you can generate a base64 encoded token from your username:passw
 
 Note that comments on a PR are not supported in Bitbucket Pipeline.
 
+### Persistent comments on Bitbucket Cloud
+
+Review and code-suggestion identity markers use invisible Markdown link references on Bitbucket Cloud.
+Existing comments with older HTML identity markers are still recognized and updated in place.
+No configuration change is required.
+
+### Incomplete pull-request diff
+
+PR-Agent stops when Bitbucket Cloud returns a different number of patches than
+entries in the filtered changed-file list, instead of treating the diff as empty.
+An affected `/add_docs`, `/generate_labels`, `/describe`, `/review`, or `/improve`
+run may post **PR-Agent command was not run** with a Bitbucket-specific explanation
+when `CONFIG.PUBLISH_OUTPUT` is enabled. This provider-specific notice replaces the
+generic `/review` and `/improve` failure output to avoid duplicate comments.
+
+Retry the command. If the problem persists, check the pull request's diff in
+Bitbucket. PR-Agent does not recover missing patches automatically.
+
 ## Bitbucket Server and Data Center
 
 Login into your on-prem instance of Bitbucket with your service account username and password.
@@ -39,6 +62,13 @@ Generate the token and add it to .secret.toml under `bitbucket_server` section
 bearer_token = "<your key>"
 ```
 
+Don't forget to also set the URL of your Bitbucket Server instance (either in `.secret.toml` or in `configuration.toml`):
+
+```toml
+[bitbucket_server]
+url = "<full URL to your Bitbucket instance, e.g.: https://git.bitbucket.com>"
+```
+
 ### Run it as CLI
 
 Modify `configuration.toml`:
@@ -47,10 +77,12 @@ Modify `configuration.toml`:
 git_provider="bitbucket_server"
 ```
 
+
+
 and pass the Pull request URL:
 
 ```shell
-python cli.py --pr_url https://git.onpreminstanceofbitbucket.com/projects/PROJECT/repos/REPO/pull-requests/1 review
+python cli.py --pr_url https://git.on-prem-instance-of-bitbucket.com/projects/PROJECT/repos/REPO/pull-requests/1 review
 ```
 
 ### Run it as service
@@ -58,11 +90,25 @@ python cli.py --pr_url https://git.onpreminstanceofbitbucket.com/projects/PROJEC
 To run PR-Agent as webhook, build the docker image:
 
 ```bash
-docker build . -t codiumai/pr-agent:bitbucket_server_webhook --target bitbucket_server_webhook -f docker/Dockerfile
-docker push codiumai/pr-agent:bitbucket_server_webhook  # Push to your Docker repository
+docker build . -t pr-agent:bitbucket_server_webhook --target bitbucket_server_webhook -f docker/Dockerfile
+
+# Optional, to push it to your own Docker repository:
+docker tag pr-agent:bitbucket_server_webhook <your-registry>/pr-agent:bitbucket_server_webhook
+docker push <your-registry>/pr-agent:bitbucket_server_webhook
 ```
 
 Navigate to `Projects` or `Repositories`, `Settings`, `Webhooks`, `Create Webhook`.
-Fill the name and URL, Authentication None select the Pull Request Opened checkbox to receive that event as webhook.
+Fill in the name and URL. Configure a webhook **Secret** and set the same value in PR-Agent's `.secrets.toml`:
+
+```toml
+[bitbucket_server]
+webhook_secret = "<webhook secret>"
+```
+
+Bitbucket signs webhook payloads with this secret in the `X-Hub-Signature` header. PR-Agent requires the secret and rejects webhook requests with HTTP 403 if it is missing or empty. Normal webhook deliveries without a valid signature also receive HTTP 403. Bitbucket's connection test remains available after the secret is configured.
+
+The separate Authentication option can remain 'None' because this server verifies the secret-based signature rather than Basic authentication. Select the 'Pull Request Opened' checkbox to receive that event as a webhook.
 
 The URL should end with `/webhook`, for example: https://domain.com/webhook
+
+The webhook server runs under gunicorn with multiple worker processes. See [Sizing a self-hosted webhook server](./index.md#sizing-a-self-hosted-webhook-server) for the `GUNICORN_WORKERS` / `GUNICORN_MAX_WORKERS` knobs and memory guidance — worth reading before setting a memory limit.

@@ -1,19 +1,28 @@
+---
+title: "Azure DevOps Integration"
+sidebar_position: 7
+---
+
 ## Azure DevOps Pipeline
 
-You can use a pre-built Action Docker image to run PR-Agent as an Azure devops pipeline.
-add the following file to your repository under `azure-pipelines.yml`:
+You can use a pre-built Action Docker image to run PR-Agent as an Azure DevOps pipeline.
+Add the following file to your repository under `azure-pipelines.yml`:
 
 ```yaml
 # Opt out of CI triggers
 trigger: none
 
 # Configure PR trigger
-pr:
-  branches:
-    include:
-    - '*'
-  autoCancel: true
-  drafts: false
+# pr:
+#   branches:
+#     include:
+#     - '*'
+#   autoCancel: true
+#   drafts: false
+
+# NOTE for Azure Repos Git:
+# Azure Repos does not honor YAML pr: triggers. Configure Build Validation
+# via Branch Policies instead (see note below). You can safely omit pr:.
 
 stages:
 - stage: pr_agent
@@ -24,7 +33,7 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     container:
-      image: codiumai/pr-agent:latest
+      image: pragent/pr-agent:latest
       options: --entrypoint ""
     variables:
       - group: pr_agent
@@ -49,17 +58,30 @@ stages:
       env:
         azure_devops__pat: $(azure_devops_pat)
         openai__key: $(OPENAI_KEY)
-      displayName: 'Run Qodo Merge'
+      displayName: 'Run PR-Agent'
 ```
 
-This script will run Qodo Merge on every new merge request, with the `improve`, `review`, and `describe` commands.
+This script will run PR-Agent on every new merge request, with the `improve`, `review`, and `describe` commands.
 Note that you need to export the `azure_devops__pat` and `OPENAI_KEY` variables in the Azure DevOps pipeline settings (Pipelines -> Library -> + Variable group):
 
-![Qodo Merge](https://codium.ai/images/pr_agent/azure_devops_pipeline_secrets.png){width=468}
+<img src="/img/azure_devops_pipeline_secrets.png" alt="PR-Agent" width="468" />
 
 Make sure to give pipeline permissions to the `pr_agent` variable group.
 
-> Note that Azure Pipelines lacks support for triggering workflows from PR comments. If you find a viable solution, please contribute it to our [issue tracker](https://github.com/Codium-ai/pr-agent/issues)
+> Note that Azure Pipelines lacks support for triggering workflows from PR comments. If you find a viable solution, please contribute it to our [issue tracker](https://github.com/the-pr-agent/pr-agent/issues)
+
+### Azure Repos Git PR triggers and Build Validation
+
+Azure Repos Git does not use YAML `pr:` triggers for pipelines. Instead, configure Build Validation on the target branch to run the PR Agent pipeline for pull requests:
+
+1. Go to Project Settings → Repositories → Branches.
+2. Select the target branch and open Branch Policies.
+3. Under Build Validation, add a policy:
+   - Select the PR Agent pipeline (the `azure-pipelines.yml` above).
+   - Set it as Required.
+4. Remove the `pr:` section from your YAML (not needed for Azure Repos Git).
+
+This distinction applies specifically to Azure Repos Git. Other providers like GitHub and Bitbucket Cloud can use YAML-based PR triggers.
 
 ## Azure DevOps from CLI
 
@@ -71,7 +93,7 @@ git_provider="azure"
 ```
 
 Azure DevOps provider supports [PAT token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows) or [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-overview#authentication-in-server-environments) authentication.
-PAT is faster to create, but has build in expiration date, and will use the user identity for API calls.
+PAT is faster to create, but has built-in expiration date, and will use the user identity for API calls.
 Using DefaultAzureCredential you can use managed identity or Service principle, which are more secure and will create separate ADO user identity (via AAD) to the agent.
 
 If PAT was chosen, you can assign the value in .secrets.toml.
@@ -87,15 +109,32 @@ org = "https://dev.azure.com/YOUR_ORGANIZATION/"
 
 ## Azure DevOps Webhook
 
-To trigger from an Azure webhook, you need to manually [add a webhook](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops).
-Use the "Pull request created" type to trigger a review, or "Pull request commented on" to trigger any supported comment with /<command> <args> comment on the relevant PR. Note that for the "Pull request commented on" trigger, only API v2.0 is supported.
+To trigger from an Azure webhook, you need to manually
+[add a webhook](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops).
+Use the "Pull request created" type to trigger a review, or "Pull request commented on" to trigger a supported
+`/<command> <args>` comment. API v2.0 is required for comment events.
 
-For webhook security, create a sporadic username/password pair and configure the webhook username and password on both the server and Azure DevOps webhook. These will be sent as basic Auth data by the webhook with each request:
+Questions can also address the agent without a slash command. Mention the Azure DevOps identity used by PR-Agent at
+the start of a PR or line comment. PR-Agent discovers that identity from its earlier comments, answers in the same
+thread, and uses the existing thread discussion as context. Generic phrases such as `hi agent` do not trigger a
+response.
+
+For the first mention before PR-Agent has posted on the pull request, or when its Azure DevOps identity changes,
+configure a stable identity (GUID/ID, unique name, or descriptor). A list can be used during an identity transition:
+
+```toml
+[azure_devops_server]
+agent_identity = "<agent identity>"
+```
+
+Webhook authentication is required. Create a username/password pair and configure the same values on the server and in the Azure DevOps webhook's Basic authentication settings. Azure DevOps sends these credentials with each request:
 
 ```toml
 [azure_devops_server]
 webhook_username = "<basic auth user>"
 webhook_password = "<basic auth password>"
 ```
+
+The server rejects webhook requests with HTTP 403 if either setting is missing or empty. With both settings configured, requests without valid Basic credentials receive HTTP 401.
 
 > :warning: **Ensure that the webhook endpoint is only accessible over HTTPS** to mitigate the risk of credential interception when using basic authentication.

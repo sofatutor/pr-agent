@@ -1,7 +1,12 @@
+---
+title: "Help"
+sidebar_position: 9
+---
+
 ## Overview
 
 The `help` tool provides a list of all the available tools and their descriptions.
-For Qodo Merge users, it also enables to trigger each tool by checking the relevant box.
+For PR-Agent users, it also enables to trigger each tool by checking the relevant box.
 
 It can be invoked manually by commenting on any PR:
 
@@ -9,12 +14,17 @@ It can be invoked manually by commenting on any PR:
 /help
 ```
 
+Calling `/help` without a question displays the tool list without initializing an AI handler,
+so errors during that initialization do not block the list.
+`/help <question>` still uses the configured AI model.
+
 ## Example usage
 
-An example [result](https://github.com/Codium-ai/pr-agent/pull/546#issuecomment-1868524805):
+Invoke the `help` tool by commenting on a PR with:
 
-![Help 1](https://codium.ai/images/pr_agent/help1.png){width=750}
+<img src="/img/help1.png" alt="Help tool input" width="750" />
 
-&rarr;
 
-![Analyze 2](https://codium.ai/images/pr_agent/help2.png){width=750}
+Response will include a list of available tools:
+
+<img src="/img/help2.webp" alt="Help tool output" width="750" />
