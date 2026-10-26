@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Bumps the digest pinned in Dockerfile.github_action_dockerhub when the
+  # upstream tag moves, but only once a release has been out for 7 days, so
+  # poisoned releases are usually caught before we pick them up.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
