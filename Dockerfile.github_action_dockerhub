@@ -1,3 +1,6 @@
 # Pinned by digest so upstream can't change what runs with our secrets.
-# Tag: codiumai/pr-agent:github_action (last updated 2026-04-16)
-FROM codiumai/pr-agent:github_action@sha256:960571f0efbc88d96127c1ee7dac3059648dfa7c2109750fc92f315cf07979ed
+# Tag: pragent/pr-agent:0.49.0-github_action (published 2026-10-25), built from
+# The-PR-Agent/pr-agent v0.49.0. Verified: GitHub build provenance
+# (gh attestation verify ... --repo The-PR-Agent/pr-agent) and litellm 1.105.1,
+# byte-identical to the PyPI wheel (the compromised release was 1.107.0).
+FROM pragent/pr-agent:github_action@sha256:b1ed6e8de56eb4d6e4169ee0d5c209bb5ed1ef071a01c0c042c64b80192a785c
